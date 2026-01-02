@@ -4,11 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Kūno pozos analizė (Total abduction)</title>
+
   <style>
     :root {
       --primary-color: #4285f4;
       --secondary-color: #34a853;
       --accent-color: #ea4335;
+      --warn-color: #fbbc05;
       --background-dark: #333;
       --background-light: #f5f5f5;
       --text-light: #fff;
@@ -35,10 +37,7 @@
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
 
-    h1 {
-      margin: 0;
-      font-size: 1.2rem;
-    }
+    h1 { margin: 0; font-size: 1.2rem; }
 
     #container {
       width: 100%;
@@ -69,11 +68,13 @@
       box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
 
+    /* You were mirroring the video; that’s fine, BUT the canvas must mirror too */
     video {
       width: 100%;
       height: auto;
       display: block;
       transform: scaleX(-1);
+      transform-origin: center;
     }
 
     canvas {
@@ -82,6 +83,9 @@
       left: 0;
       width: 100%;
       height: 100%;
+      transform: scaleX(-1);       /* <--- THIS fixes “points fly around” */
+      transform-origin: center;
+      pointer-events: none;
     }
 
     #info-panel {
@@ -96,17 +100,30 @@
     }
 
     #angle-display {
-      font-size: 1.2rem;
+      font-size: 1.1rem;
       margin-bottom: 15px;
       text-align: center;
       font-weight: bold;
     }
 
     .angle-value {
-      color: var(--secondary-color);
-      font-size: 1.6rem;
+      font-size: 1.8rem;
       margin-top: 6px;
+      font-weight: 800;
     }
+
+    /* Zone label */
+    .zone-label {
+      margin-top: 6px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      min-height: 1.2em; /* keeps layout stable even when empty */
+    }
+
+    .zone-green { color: var(--secondary-color); }
+    .zone-yellow { color: var(--warn-color); }
+    .zone-red { color: var(--accent-color); }
+    .zone-none { color: #ccc; }
 
     #landmark-data {
       font-family: monospace;
@@ -145,7 +162,6 @@
       transition: background 0.3s;
       display: inline-block;
     }
-
     .button:hover { background: #3367d6; }
 
     .status-indicator {
@@ -171,7 +187,10 @@
 
   <div id="container">
     <div class="instructions">
-      <p>Padėkite save taip, kad būtų matomi klubai ir keliai. Rodomas <b>total abduction</b> kampas (kaip jūsų Python kode: kampas tarp vektorių iš klubų vidurio į kairį ir dešinį kelį).</p>
+      <p>
+        Padėkite save taip, kad būtų matomi klubai ir keliai. Rodomas <b>total abduction</b> kampas
+        (kaip jūsų Python kode: kampas tarp vektorių iš klubų vidurio į kairį ir dešinį kelį).
+      </p>
     </div>
 
     <div id="permission-message">
@@ -189,7 +208,8 @@
       <div id="angle-display">
         <span class="status-indicator status-inactive" id="status-indicator"></span>
         <span id="angle-text">Kraunama...</span>
-        <div id="angle-value" class="angle-value">-</div>
+        <div id="angle-value" class="angle-value zone-none">-</div>
+        <div id="zone-label" class="zone-label zone-none"></div>
       </div>
       <div id="landmark-data">Palaukite, kol bus aptikta poza...</div>
     </div>
@@ -198,7 +218,7 @@
   <script type="module">
     import { PoseLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/+esm";
 
-    // Tie patys taškai kaip jūsų Python kode
+    // Same points as Python
     const LANDMARKS = {
       LEFT_HIP: 23,
       RIGHT_HIP: 24,
@@ -216,11 +236,12 @@
     const statusIndicator = document.getElementById("status-indicator");
     const angleText = document.getElementById("angle-text");
     const angleValue = document.getElementById("angle-value");
+    const zoneLabelEl = document.getElementById("zone-label");
     const landmarkData = document.getElementById("landmark-data");
     const videoContainer = document.getElementById("video-container");
 
     // ----------------------------
-    // One Euro Filter (JS) – atitinka jūsų Python logiką
+    // One Euro filter (Python-equivalent)
     // ----------------------------
     class OneEuro {
       constructor(min_cutoff = 1.0, beta = 0.0, d_cutoff = 1.0) {
@@ -262,32 +283,23 @@
       }
     }
 
-    // Jei norėsite “raw” be filtro – tiesiog nustatykite useFilter = false
     const useFilter = true;
-    // Šitas galite pakeisti į jūsų rasto grid-search best_params
-    const oneEuro = new OneEuro(/*min_cutoff*/ 1.0, /*beta*/ 0.0, /*d_cutoff*/ 1.0);
+
+    // Put your tuned params here if you have them:
+    // Example: new OneEuro(best_min_cutoff, best_beta, 1.0)
+    const oneEuro = new OneEuro(1.0, 0.0, 1.0);
 
     // ----------------------------
-    // Python total_abduction port'as į JS:
+    // Python total_abduction port
     // angle between (Hmid -> left_knee) and (Hmid -> right_knee)
     // ----------------------------
-    function hypot2(x, y) {
-      return Math.hypot(x, y);
-    }
-
     function unit(v) {
-      const n = hypot2(v.x, v.y);
-      if (n <= 1e-6) return { x: 0.0, y: 0.0 };
-      return { x: v.x / n, y: v.y / n };
+      const n = Math.hypot(v.x, v.y);
+      return n > 1e-6 ? { x: v.x / n, y: v.y / n } : { x: 0.0, y: 0.0 };
     }
 
-    function sub(a, b) {
-      return { x: a.x - b.x, y: a.y - b.y };
-    }
-
-    function dot(a, b) {
-      return a.x * b.x + a.y * b.y;
-    }
+    function sub(a, b) { return { x: a.x - b.x, y: a.y - b.y }; }
+    function dot(a, b) { return a.x * b.x + a.y * b.y; }
 
     function angleBetween(a, b) {
       const ua = unit(a);
@@ -298,10 +310,7 @@
     }
 
     function hipMidpoint(leftHip, rightHip) {
-      return {
-        x: (leftHip.x + rightHip.x) / 2.0,
-        y: (leftHip.y + rightHip.y) / 2.0,
-      };
+      return { x: (leftHip.x + rightHip.x) / 2.0, y: (leftHip.y + rightHip.y) / 2.0 };
     }
 
     function totalAbduction(leftHip, rightHip, leftKnee, rightKnee) {
@@ -312,7 +321,45 @@
     }
 
     // ----------------------------
-    // Kamera
+    // Zone logic (your rules)
+    // ----------------------------
+    function clearZoneClasses(el) {
+      el.classList.remove("zone-green", "zone-yellow", "zone-red", "zone-none");
+    }
+
+    function setZone(angleDeg) {
+      clearZoneClasses(zoneLabelEl);
+      clearZoneClasses(angleValue);
+
+      if (!Number.isFinite(angleDeg)) {
+        zoneLabelEl.textContent = "";
+        zoneLabelEl.classList.add("zone-none");
+        angleValue.classList.add("zone-none");
+        return;
+      }
+
+      if (angleDeg < 60) {
+        // no message under 60
+        zoneLabelEl.textContent = "";
+        zoneLabelEl.classList.add("zone-none");
+        angleValue.classList.add("zone-none");
+      } else if (angleDeg < 90) {
+        zoneLabelEl.textContent = "correct abduction";
+        zoneLabelEl.classList.add("zone-green");
+        angleValue.classList.add("zone-green");
+      } else if (angleDeg < 110) {
+        zoneLabelEl.textContent = "warning zone";
+        zoneLabelEl.classList.add("zone-yellow");
+        angleValue.classList.add("zone-yellow");
+      } else {
+        zoneLabelEl.textContent = "too high";
+        zoneLabelEl.classList.add("zone-red");
+        angleValue.classList.add("zone-red");
+      }
+    }
+
+    // ----------------------------
+    // Camera
     // ----------------------------
     async function initCamera() {
       try {
@@ -328,7 +375,7 @@
         permissionMessage.style.display = "none";
 
         video.onloadedmetadata = () => {
-          resizeCanvasToVideo();
+          resizeCanvas();
           startDetection();
         };
       } catch (err) {
@@ -340,9 +387,15 @@
       }
     }
 
-    function resizeCanvasToVideo() {
-      canvas.width = videoContainer.clientWidth;
-      canvas.height = videoContainer.clientWidth * (video.videoHeight / video.videoWidth);
+    // Key fix: match canvas internal resolution to video resolution
+    function resizeCanvas() {
+      if (!video.videoWidth || !video.videoHeight) return;
+
+      // internal drawing buffer matches video
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      // CSS already scales canvas to container size
     }
 
     // ----------------------------
@@ -378,6 +431,7 @@
       return text;
     }
 
+    // Draw in video pixel coordinates (since canvas = video resolution)
     function drawPointNorm(p, radius, fillStyle) {
       const x = p.x * canvas.width;
       const y = p.y * canvas.height;
@@ -388,7 +442,7 @@
       return { x, y };
     }
 
-    function drawLinePx(a, b, strokeStyle, width = 3) {
+    function drawLinePx(a, b, strokeStyle, width = 4) {
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
@@ -401,6 +455,11 @@
       if (!poseLandmarker || !video.videoWidth) {
         requestAnimationFrame(detectPose);
         return;
+      }
+
+      // keep canvas synced in case orientation changes
+      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+        resizeCanvas();
       }
 
       try {
@@ -422,40 +481,47 @@
 
             angleText.textContent = "Total abduction:";
             angleValue.textContent = `${shownAngle.toFixed(1)}°`;
+            setZone(shownAngle);
 
             statusIndicator.classList.remove("status-inactive");
             statusIndicator.classList.add("status-active");
 
-            // tekstas
             landmarkData.textContent = formatLandmarkBlock(leftHip, rightHip, leftKnee, rightKnee, H);
 
-            // piešimas
+            // draw
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            const pLH = drawPointNorm(leftHip, 7, "#00FF00");
-            const pRH = drawPointNorm(rightHip, 7, "#00FF00");
-            const pLK = drawPointNorm(leftKnee, 7, "#00FF00");
-            const pRK = drawPointNorm(rightKnee, 7, "#00FF00");
-            const pH  = drawPointNorm(H, 7, "#FF0000"); // hip midpoint
+            const pLH = drawPointNorm(leftHip, 10, "#00FF00");
+            const pRH = drawPointNorm(rightHip, 10, "#00FF00");
+            const pLK = drawPointNorm(leftKnee, 10, "#00FF00");
+            const pRK = drawPointNorm(rightKnee, 10, "#00FF00");
+            const pH  = drawPointNorm(H, 10, "#FF0000");
 
-            drawLinePx(pH, pLK, "#00FF00", 3);
-            drawLinePx(pH, pRK, "#00FF00", 3);
+            drawLinePx(pH, pLK, "#00FF00", 5);
+            drawLinePx(pH, pRK, "#00FF00", 5);
+
           } else {
             angleValue.textContent = "-";
             angleText.textContent = "Nepakanka taškų";
+            setZone(NaN);
+
             statusIndicator.classList.remove("status-active");
             statusIndicator.classList.add("status-inactive");
             landmarkData.textContent = "Palaukite, kol bus aptikti klubai ir keliai...";
             ctx.clearRect(0, 0, canvas.width, canvas.height);
           }
+
         } else {
           angleValue.textContent = "-";
           angleText.textContent = "Kampas: Nepavyko aptikti";
+          setZone(NaN);
+
           statusIndicator.classList.remove("status-active");
           statusIndicator.classList.add("status-inactive");
           landmarkData.textContent = "Palaukite, kol bus aptikta poza...";
           ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
+
       } catch (err) {
         console.error("Aptikimo klaida:", err);
       }
@@ -475,7 +541,8 @@
     });
 
     window.addEventListener("resize", () => {
-      if (video.videoWidth) resizeCanvasToVideo();
+      // CSS scales automatically; internal buffer stays at video resolution
+      // but if orientation changes, metadata handler / detectPose sync will fix it
     });
   </script>
 </body>
