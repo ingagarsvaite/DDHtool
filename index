@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="lt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kūno pozos analizė (Total abduction)</title>
+  <style>
+    :root {
+      --primary-color: #4285f4;
+      --secondary-color: #34a853;
+      --accent-color: #ea4335;
+      --background-dark: #333;
+      --background-light: #f5f5f5;
+      --text-light: #fff;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: var(--background-light);
+      color: #333;
+      line-height: 1.6;
+      padding: 0;
+    }
+
+    header {
+      text-align: center;
+      padding: 15px 0;
+      width: 100%;
+      background: var(--primary-color);
+      color: var(--text-light);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.2rem;
+    }
+
+    #container {
+      width: 100%;
+      max-width: 500px;
+      margin: 20px auto;
+      padding: 0 15px;
+      box-sizing: border-box;
+    }
+
+    .instructions {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+      font-size: 0.9rem;
+    }
+
+    #video-container {
+      position: relative;
+      width: 100%;
+      max-width: 400px;
+      margin: 0 auto;
+      border: 2px solid var(--primary-color);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #000;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    video {
+      width: 100%;
+      height: auto;
+      display: block;
+      transform: scaleX(-1);
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    #info-panel {
+      margin-top: 20px;
+      padding: 15px;
+      background: var(--background-dark);
+      border-radius: 8px;
+      color: var(--text-light);
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    #angle-display {
+      font-size: 1.2rem;
+      margin-bottom: 15px;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .angle-value {
+      color: var(--secondary-color);
+      font-size: 1.6rem;
+      margin-top: 6px;
+    }
+
+    #landmark-data {
+      font-family: monospace;
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: rgba(255,255,255,0.1);
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+      max-height: 160px;
+      overflow-y: auto;
+    }
+
+    #permission-message {
+      display: none;
+      padding: 20px;
+      background: #fff3cd;
+      border: 1px solid #ffeaa7;
+      border-radius: 8px;
+      margin: 20px 0;
+      text-align: center;
+      max-width: 400px;
+      color: #856404;
+    }
+
+    .button {
+      margin-top: 15px;
+      padding: 10px 20px;
+      background: var(--primary-color);
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.3s;
+      display: inline-block;
+    }
+
+    .button:hover { background: #3367d6; }
+
+    .status-indicator {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    .status-active {
+      background: var(--secondary-color);
+      box-shadow: 0 0 5px var(--secondary-color);
+    }
+    .status-inactive { background: #ccc; }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>Kūno pozos analizė (Total abduction)</h1>
+  </header>
+
+  <div id="container">
+    <div class="instructions">
+      <p>Padėkite save taip, kad būtų matomi klubai ir keliai. Rodomas <b>total abduction</b> kampas (kaip jūsų Python kode: kampas tarp vektorių iš klubų vidurio į kairį ir dešinį kelį).</p>
+    </div>
+
+    <div id="permission-message">
+      <p>Prašome leisti kameros prieigą norint naudoti programą.</p>
+      <p>Įsitikinkite, kad suteikėte kameros leidimą savo naršyklės nustatymuose.</p>
+      <button id="retry-button" class="button">Bandyti vėl</button>
+    </div>
+
+    <div id="video-container">
+      <video id="video" playsinline autoplay muted></video>
+      <canvas id="canvas"></canvas>
+    </div>
+
+    <div id="info-panel">
+      <div id="angle-display">
+        <span class="status-indicator status-inactive" id="status-indicator"></span>
+        <span id="angle-text">Kraunama...</span>
+        <div id="angle-value" class="angle-value">-</div>
+      </div>
+      <div id="landmark-data">Palaukite, kol bus aptikta poza...</div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { PoseLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/+esm";
+
+    // Tie patys taškai kaip jūsų Python kode
+    const LANDMARKS = {
+      LEFT_HIP: 23,
+      RIGHT_HIP: 24,
+      LEFT_KNEE: 25,
+      RIGHT_KNEE: 26,
+    };
+
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    const permissionMessage = document.getElementById("permission-message");
+    const retryButton = document.getElementById("retry-button");
+
+    const statusIndicator = document.getElementById("status-indicator");
+    const angleText = document.getElementById("angle-text");
+    const angleValue = document.getElementById("angle-value");
+    const landmarkData = document.getElementById("landmark-data");
+    const videoContainer = document.getElementById("video-container");
+
+    // ----------------------------
+    // One Euro Filter (JS) – atitinka jūsų Python logiką
+    // ----------------------------
+    class OneEuro {
+      constructor(min_cutoff = 1.0, beta = 0.0, d_cutoff = 1.0) {
+        this.min_cutoff = Number(min_cutoff);
+        this.beta = Number(beta);
+        this.d_cutoff = Number(d_cutoff);
+        this.x_prev = null;
+        this.dx_prev = 0.0;
+        this.t_prev = null;
+      }
+
+      static alpha(dt, cutoff) {
+        const tau = 1.0 / (2.0 * Math.PI * cutoff);
+        return 1.0 / (1.0 + tau / dt);
+      }
+
+      filter(t, x) {
+        if (this.t_prev === null) {
+          this.t_prev = t;
+          this.x_prev = x;
+          this.dx_prev = 0.0;
+          return x;
+        }
+
+        const dt = Math.max(1e-6, t - this.t_prev);
+        const dx = (x - this.x_prev) / dt;
+
+        const a_d = OneEuro.alpha(dt, this.d_cutoff);
+        const dx_hat = a_d * dx + (1.0 - a_d) * this.dx_prev;
+
+        const cutoff = Math.max(1e-6, this.min_cutoff + this.beta * Math.abs(dx_hat));
+        const a_x = OneEuro.alpha(dt, cutoff);
+        const x_hat = a_x * x + (1.0 - a_x) * this.x_prev;
+
+        this.t_prev = t;
+        this.x_prev = x_hat;
+        this.dx_prev = dx_hat;
+        return x_hat;
+      }
+    }
+
+    // Jei norėsite “raw” be filtro – tiesiog nustatykite useFilter = false
+    const useFilter = true;
+    // Šitas galite pakeisti į jūsų rasto grid-search best_params
+    const oneEuro = new OneEuro(/*min_cutoff*/ 1.0, /*beta*/ 0.0, /*d_cutoff*/ 1.0);
+
+    // ----------------------------
+    // Python total_abduction port'as į JS:
+    // angle between (Hmid -> left_knee) and (Hmid -> right_knee)
+    // ----------------------------
+    function hypot2(x, y) {
+      return Math.hypot(x, y);
+    }
+
+    function unit(v) {
+      const n = hypot2(v.x, v.y);
+      if (n <= 1e-6) return { x: 0.0, y: 0.0 };
+      return { x: v.x / n, y: v.y / n };
+    }
+
+    function sub(a, b) {
+      return { x: a.x - b.x, y: a.y - b.y };
+    }
+
+    function dot(a, b) {
+      return a.x * b.x + a.y * b.y;
+    }
+
+    function angleBetween(a, b) {
+      const ua = unit(a);
+      const ub = unit(b);
+      let c = dot(ua, ub);
+      c = Math.max(-1.0, Math.min(1.0, c));
+      return (Math.acos(c) * 180) / Math.PI;
+    }
+
+    function hipMidpoint(leftHip, rightHip) {
+      return {
+        x: (leftHip.x + rightHip.x) / 2.0,
+        y: (leftHip.y + rightHip.y) / 2.0,
+      };
+    }
+
+    function totalAbduction(leftHip, rightHip, leftKnee, rightKnee) {
+      const H = hipMidpoint(leftHip, rightHip);
+      const vL = sub(H, leftKnee);
+      const vR = sub(H, rightKnee);
+      return { angle: angleBetween(vL, vR), H };
+    }
+
+    // ----------------------------
+    // Kamera
+    // ----------------------------
+    async function initCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "environment",
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        });
+
+        video.srcObject = stream;
+        permissionMessage.style.display = "none";
+
+        video.onloadedmetadata = () => {
+          resizeCanvasToVideo();
+          startDetection();
+        };
+      } catch (err) {
+        console.error("Kameros klaida:", err);
+        permissionMessage.style.display = "block";
+        angleText.textContent = "Klaida: Nepavyko pasiekti kameros";
+        statusIndicator.classList.remove("status-active");
+        statusIndicator.classList.add("status-inactive");
+      }
+    }
+
+    function resizeCanvasToVideo() {
+      canvas.width = videoContainer.clientWidth;
+      canvas.height = videoContainer.clientWidth * (video.videoHeight / video.videoWidth);
+    }
+
+    // ----------------------------
+    // MediaPipe PoseLandmarker
+    // ----------------------------
+    let poseLandmarker;
+
+    async function initializePoseLandmarker() {
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
+      );
+
+      poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath:
+            "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+          delegate: "GPU",
+        },
+        runningMode: "VIDEO",
+        numPoses: 1,
+        minPoseDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+    }
+
+    function formatLandmarkBlock(leftHip, rightHip, leftKnee, rightKnee, H) {
+      let text = "Taškų koordinatės (normalized):\n";
+      text += `- Kairės klubas:   X:${leftHip.x.toFixed(4)}, Y:${leftHip.y.toFixed(4)}\n`;
+      text += `- Dešinės klubas:  X:${rightHip.x.toFixed(4)}, Y:${rightHip.y.toFixed(4)}\n`;
+      text += `- Kairės kelis:    X:${leftKnee.x.toFixed(4)}, Y:${leftKnee.y.toFixed(4)}\n`;
+      text += `- Dešinės kelis:   X:${rightKnee.x.toFixed(4)}, Y:${rightKnee.y.toFixed(4)}\n`;
+      text += `- Klubų vidurys:   X:${H.x.toFixed(4)}, Y:${H.y.toFixed(4)}`;
+      return text;
+    }
+
+    function drawPointNorm(p, radius, fillStyle) {
+      const x = p.x * canvas.width;
+      const y = p.y * canvas.height;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, 2 * Math.PI);
+      ctx.fillStyle = fillStyle;
+      ctx.fill();
+      return { x, y };
+    }
+
+    function drawLinePx(a, b, strokeStyle, width = 3) {
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth = width;
+      ctx.stroke();
+    }
+
+    async function detectPose() {
+      if (!poseLandmarker || !video.videoWidth) {
+        requestAnimationFrame(detectPose);
+        return;
+      }
+
+      try {
+        const detections = await poseLandmarker.detectForVideo(video, performance.now());
+
+        if (detections.landmarks && detections.landmarks.length > 0) {
+          const lm = detections.landmarks[0];
+
+          const leftHip = lm[LANDMARKS.LEFT_HIP];
+          const rightHip = lm[LANDMARKS.RIGHT_HIP];
+          const leftKnee = lm[LANDMARKS.LEFT_KNEE];
+          const rightKnee = lm[LANDMARKS.RIGHT_KNEE];
+
+          if (leftHip && rightHip && leftKnee && rightKnee) {
+            const { angle, H } = totalAbduction(leftHip, rightHip, leftKnee, rightKnee);
+
+            const tSec = performance.now() / 1000.0;
+            const shownAngle = useFilter ? oneEuro.filter(tSec, angle) : angle;
+
+            angleText.textContent = "Total abduction:";
+            angleValue.textContent = `${shownAngle.toFixed(1)}°`;
+
+            statusIndicator.classList.remove("status-inactive");
+            statusIndicator.classList.add("status-active");
+
+            // tekstas
+            landmarkData.textContent = formatLandmarkBlock(leftHip, rightHip, leftKnee, rightKnee, H);
+
+            // piešimas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const pLH = drawPointNorm(leftHip, 7, "#00FF00");
+            const pRH = drawPointNorm(rightHip, 7, "#00FF00");
+            const pLK = drawPointNorm(leftKnee, 7, "#00FF00");
+            const pRK = drawPointNorm(rightKnee, 7, "#00FF00");
+            const pH  = drawPointNorm(H, 7, "#FF0000"); // hip midpoint
+
+            drawLinePx(pH, pLK, "#00FF00", 3);
+            drawLinePx(pH, pRK, "#00FF00", 3);
+          } else {
+            angleValue.textContent = "-";
+            angleText.textContent = "Nepakanka taškų";
+            statusIndicator.classList.remove("status-active");
+            statusIndicator.classList.add("status-inactive");
+            landmarkData.textContent = "Palaukite, kol bus aptikti klubai ir keliai...";
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+          }
+        } else {
+          angleValue.textContent = "-";
+          angleText.textContent = "Kampas: Nepavyko aptikti";
+          statusIndicator.classList.remove("status-active");
+          statusIndicator.classList.add("status-inactive");
+          landmarkData.textContent = "Palaukite, kol bus aptikta poza...";
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+      } catch (err) {
+        console.error("Aptikimo klaida:", err);
+      }
+
+      requestAnimationFrame(detectPose);
+    }
+
+    async function startDetection() {
+      await initializePoseLandmarker();
+      detectPose();
+    }
+
+    retryButton.addEventListener("click", initCamera);
+
+    document.addEventListener("DOMContentLoaded", () => {
+      initCamera();
+    });
+
+    window.addEventListener("resize", () => {
+      if (video.videoWidth) resizeCanvasToVideo();
+    });
+  </script>
+</body>
+</html>
