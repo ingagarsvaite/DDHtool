@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Kūno pozos analizė (Total abduction)</title>
+  <title>Hip abduction assession tool to aid hip-scipa casting after DDH treatment</title>
 
   <style>
     :root {
@@ -188,15 +188,14 @@
   <div id="container">
     <div class="instructions">
       <p>
-        Padėkite save taip, kad būtų matomi klubai ir keliai. Rodomas <b>total abduction</b> kampas
-        (kaip jūsų Python kode: kampas tarp vektorių iš klubų vidurio į kairį ir dešinį kelį).
+        Position: supine, hip flexion = 90, knees flexed.
       </p>
     </div>
 
     <div id="permission-message">
-      <p>Prašome leisti kameros prieigą norint naudoti programą.</p>
-      <p>Įsitikinkite, kad suteikėte kameros leidimą savo naršyklės nustatymuose.</p>
-      <button id="retry-button" class="button">Bandyti vėl</button>
+      <p>Please let program access the camera</p>
+      <p>Make sure camera could be accessed</p>
+      <button id="retry-button" class="button">Retry</button>
     </div>
 
     <div id="video-container">
@@ -211,7 +210,7 @@
         <div id="angle-value" class="angle-value zone-none">-</div>
         <div id="zone-label" class="zone-label zone-none"></div>
       </div>
-      <div id="landmark-data">Palaukite, kol bus aptikta poza...</div>
+      <div id="landmark-data">Waiting...</div>
     </div>
   </div>
 
@@ -285,13 +284,9 @@
 
     const useFilter = true;
 
-    // Put your tuned params here if you have them:
-    // Example: new OneEuro(best_min_cutoff, best_beta, 1.0)
     const oneEuro = new OneEuro(0.026, 0.0, 1.0);
 
     // ----------------------------
-    // Python total_abduction port
-    // angle between (Hmid -> left_knee) and (Hmid -> right_knee)
     // ----------------------------
     function unit(v) {
       const n = Math.hypot(v.x, v.y);
