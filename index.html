@@ -182,7 +182,7 @@
 
 <body>
   <header>
-    <h1>Kūno pozos analizė (Total abduction)</h1>
+    <h1>Hip abduction estimation tool</h1>
   </header>
 
   <div id="container">
@@ -206,7 +206,7 @@
     <div id="info-panel">
       <div id="angle-display">
         <span class="status-indicator status-inactive" id="status-indicator"></span>
-        <span id="angle-text">Kraunama...</span>
+        <span id="angle-text">Waiting...</span>
         <div id="angle-value" class="angle-value zone-none">-</div>
         <div id="zone-label" class="zone-label zone-none"></div>
       </div>
@@ -374,9 +374,9 @@
           startDetection();
         };
       } catch (err) {
-        console.error("Kameros klaida:", err);
+        console.error("Camera error:", err);
         permissionMessage.style.display = "block";
-        angleText.textContent = "Klaida: Nepavyko pasiekti kameros";
+        angleText.textContent = "Error: No camera";
         statusIndicator.classList.remove("status-active");
         statusIndicator.classList.add("status-inactive");
       }
@@ -508,17 +508,17 @@
 
         } else {
           angleValue.textContent = "-";
-          angleText.textContent = "Kampas: Nepavyko aptikti";
+          angleText.textContent = "Angle not detected";
           setZone(NaN);
 
           statusIndicator.classList.remove("status-active");
           statusIndicator.classList.add("status-inactive");
-          landmarkData.textContent = "Palaukite, kol bus aptikta poza...";
+          landmarkData.textContent = "Waiting for pose..";
           ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
 
       } catch (err) {
-        console.error("Aptikimo klaida:", err);
+        console.error("Error. no pose:", err);
       }
 
       requestAnimationFrame(detectPose);
