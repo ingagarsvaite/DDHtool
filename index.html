@@ -217,16 +217,6 @@
       <p>Position: supine. Hip flexion = 90°. Knees flexed.</p>
     </div>
 
-    <div class="controls">
-      <label class="toggle" for="mirror-toggle">
-        <input type="checkbox" id="mirror-toggle" />
-        Mirror view
-      </label>
-      <div style="opacity:.8;font-size:.85rem;">
-        Tip: for rear camera, mirror is usually OFF.
-      </div>
-    </div>
-
     <div id="permission-message">
       <p>Please allow access to the camera.</p>
       <p>Check that camera permissions are enabled in your browser/device settings.</p>
@@ -267,23 +257,13 @@
     const zoneLabelEl = document.getElementById("zone-label");
     const landmarkData = document.getElementById("landmark-data");
 
-    // Mirror toggle
-    const mirrorToggle = document.getElementById("mirror-toggle");
-    const MIRROR_KEY = "ddh_mirror_view";
-
+    // Mirror (always ON by default)
     function applyMirror(isOn) {
       video.classList.toggle("mirrored", isOn);
       canvas.classList.toggle("mirrored", isOn);
-      localStorage.setItem(MIRROR_KEY, String(isOn));
     }
 
-    // Default: ON (true), but load saved preference if exists
-    const savedMirror = localStorage.getItem(MIRROR_KEY);
-    const initialMirror = savedMirror === null ? true : (savedMirror === "true");
-    mirrorToggle.checked = initialMirror;
-    applyMirror(initialMirror);
-
-    mirrorToggle.addEventListener("change", () => applyMirror(mirrorToggle.checked));
+    applyMirror(true);
 
     // ----------------------------
     // One Euro filter
@@ -548,3 +528,4 @@
   </script>
 </body>
 </html>
+
